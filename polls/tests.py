@@ -4,7 +4,7 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from .models import Question
+from .models import Question, Choice
 
 
 class QuestionModelTests(TestCase):
@@ -47,6 +47,10 @@ def create_question(question_text, days):
     return Question.objects.create(question_text=question_text, pub_date=time)
 
 
+def create_choice(question, choice_text, votes=0):
+    return Choice.objects.create(question=question, choice_text=choice_text, votes=votes)
+
+
 class QuestionIndexViewTests(TestCase):
     def test_no_questions(self):
         """
@@ -62,7 +66,8 @@ class QuestionIndexViewTests(TestCase):
         Questions with a pub_date in the past are displayed on the
         index page.
         """
-        create_question(question_text="Past question.", days=-30)
+        question = create_question(question_text="Past question.", days=-30)
+        create_choice(question=question, choice_text='choice')
         response = self.client.get(reverse('polls:index'))
         self.assertQuerysetEqual(
             response.context['latest_question_list'],
@@ -84,8 +89,10 @@ class QuestionIndexViewTests(TestCase):
         Even if both past and future questions exist, only past questions
         are displayed.
         """
-        create_question(question_text="Past question.", days=-30)
-        create_question(question_text="Future question.", days=30)
+        past_question= create_question(question_text="Past question.", days=-30)
+        future_question = create_question(question_text="Future question.", days=30)
+        create_choice(question=past_question, choice_text="Past choice")
+        create_choice(question=future_question, choice_text="Future choice")
         response = self.client.get(reverse('polls:index'))
         self.assertQuerysetEqual(
             response.context['latest_question_list'],
@@ -96,13 +103,22 @@ class QuestionIndexViewTests(TestCase):
         """
         The questions index page may display multiple questions.
         """
-        create_question(question_text="Past question 1.", days=-30)
-        create_question(question_text="Past question 2.", days=-5)
+        past_question_1 = create_question(question_text="Past question 1.", days=-30)
+        past_question_2 = create_question(question_text="Past question 2.", days=-5)
+        create_choice(question=past_question_1, choice_text="Past choice 1")
+        create_choice(question=past_question_2, choice_text="Past choice 2")
         response = self.client.get(reverse('polls:index'))
         self.assertQuerysetEqual(
             response.context['latest_question_list'],
             ['<Question: Past question 2.>', '<Question: Past question 1.>']
         )
+
+    def test_empty_choice_question(self):
+        create_question(question_text="empty choice question", days=-3)
+        response = self.client.get(reverse('polls:index'))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "No polls are available.")
+        self.assertQuerysetEqual(response.context['latest_question_list'], [])
 
 
 class QuestionDetailViewTests(TestCase):
